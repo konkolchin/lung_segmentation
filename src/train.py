@@ -293,16 +293,16 @@ def main():
         train_dataset, 
         batch_size=config.batch_size,
         shuffle=True,
-        num_workers=0,
-        pin_memory=True
+        num_workers=config.num_workers,
+        pin_memory=config.pin_memory
     )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.batch_size,
         shuffle=False,
-        num_workers=0,
-        pin_memory=True
+        num_workers=config.num_workers,
+        pin_memory=config.pin_memory
     )
     
     print(f'Training samples: {len(train_dataset)}')

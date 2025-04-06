@@ -1,71 +1,129 @@
 # Running Lung Segmentation Training on Google Colab
 
-This guide explains how to run the lung segmentation training on Google Colab with GPU acceleration.
+This guide explains how to run the lung segmentation training pipeline on Google Colab.
 
-## Setup Steps
+## Data Preparation
 
-1. **Upload Dataset to Google Drive**
-   - Create a folder in your Google Drive called `lung_segmentation_data`
-   - Inside it, create the following structure:
-     ```
-     lung_segmentation_data/
-     ├── data/
-     │   ├── train/
-     │   │   ├── images/
-     │   │   └── masks/
-     │   └── val/
-     │       ├── images/
-     │       └── masks/
-     ```
-   - Upload your training and validation data to the respective folders
+Before uploading to Colab, organize your dataset using the provided script:
 
-2. **Open the Notebook in Colab**
-   - Open Google Colab (https://colab.research.google.com)
-   - Upload `lung_segmentation_training.ipynb` or open it from your GitHub repository
-   - Make sure you're using a GPU runtime:
-     - Runtime → Change runtime type → Hardware accelerator → GPU
+1. Prepare your source data:
+   ```
+   source_data/
+   ├── images/
+   │   ├── image1.png
+   │   ├── image2.png
+   │   └── ...
+   └── masks/
+       ├── image1.png
+       ├── image2.png
+       └── ...
+   ```
 
-3. **Mount Google Drive**
-   - The notebook will automatically mount your Google Drive
-   - When prompted, authorize access to your Drive
+2. Run the preparation script:
+   ```bash
+   python src/prepare_colab_data.py --source ./source_data --dest ./prepared_data --split 0.8
+   ```
+   This will:
+   - Create train/val splits
+   - Verify image-mask pairs
+   - Organize files in the correct structure
+   - Generate a summary report
 
-4. **Run the Training**
-   - Run all cells in sequence
-   - The training progress will be displayed in the output
-   - You can monitor training metrics using TensorBoard
+3. Upload the prepared data:
+   - Zip the prepared_data folder
+   - Upload to Google Drive
+   - The script will verify data integrity after copying to Colab
 
-## Features
+## Setup Instructions
 
-- Automatic GPU detection and utilization
-- Increased batch size for GPU training
-- TensorBoard integration for monitoring:
-  - Training and validation loss
-  - Dice scores
-  - Learning rate
-  - Sample predictions
-- Checkpointing of best models
-- Google Drive integration for data storage
+1. Open the `lung_segmentation.ipynb` notebook in Google Colab
+2. Mount your Google Drive:
+   ```python
+   from google.colab import drive
+   drive.mount('/content/drive')
+   ```
+
+3. Clone the repository:
+   ```bash
+   !git clone https://github.com/YOUR_USERNAME/Lung_segmentation.git
+   %cd Lung_segmentation
+   ```
+
+4. Install dependencies:
+   ```bash
+   !pip install -r requirements_colab.txt
+   ```
+
+5. Copy your dataset:
+   ```bash
+   # Create data directory
+   !mkdir -p data
+   
+   # Unzip and copy the prepared dataset
+   !unzip "/content/drive/MyDrive/prepared_data.zip" -d ./data
+   
+   # Verify the data structure
+   !python src/prepare_colab_data.py --source ./data/prepared_data --dest ./data --split 0.8
+   ```
+
+## Directory Structure
+The training script expects the following directory structure:
+```
+data/
+├── train/
+│   ├── images/
+│   └── masks/
+└── val/
+    ├── images/
+    └── masks/
+```
+
+## Training
+
+The training script is configured to:
+- Use Colab's GPU
+- Save checkpoints to Google Drive
+- Log training metrics and images to TensorBoard
+- Use optimized batch size and workers for Colab
+
+To start training:
+```bash
+cd src
+python train.py
+```
+
+## Monitoring Training
+
+1. Monitor training progress in real-time using TensorBoard:
+```python
+%load_ext tensorboard
+%tensorboard --logdir /content/drive/MyDrive/lung_segmentation_logs
+```
+
+2. Checkpoints are saved to:
+   - `/content/drive/MyDrive/lung_segmentation_checkpoints`
+
+## Optimizations for Colab
+
+The code has been optimized for Colab with:
+- Increased batch size (8)
+- Multi-worker data loading
+- Automatic GPU detection
+- Persistent storage in Google Drive
+- More frequent checkpointing
+- Enhanced logging
 
 ## Troubleshooting
 
-1. **GPU Not Available**
-   - Verify you've selected GPU runtime in Colab
-   - Check if you've exceeded your Colab GPU quota
-   - Try reconnecting to the runtime
+1. If you encounter OOM (Out of Memory) errors:
+   - Reduce batch_size in config.py
+   - Reduce num_workers if needed
 
-2. **Out of Memory**
-   - Reduce batch size in `ColabConfig`
-   - Clear output cells and restart runtime
-   - Try using a smaller image size
+2. If the training is interrupted:
+   - Checkpoints are saved every 5 epochs
+   - You can resume from the latest checkpoint
 
-3. **Data Loading Issues**
-   - Verify your Google Drive folder structure
-   - Check file permissions
-   - Ensure all image files are in the correct format
-
-## Tips
-
-- Save important checkpoints to your Google Drive
-- Use TensorBoard to monitor training progress
-- For long training sessions, enable "Settings → Hardware accelerator → GPU" to prevent timeout
-- Consider using Colab Pro for longer sessions and better GPUs 
+3. For any other issues:
+   - Check the error messages in the notebook
+   - Verify GPU availability with `!nvidia-smi`
+   - Check your dataset paths 
