@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  lung_segmentation:
+    build: .
+    image: lung_segmentation:latest
+    container_name: lung_segmentation
+    volumes:
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+      - ./logs:/app/logs
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped 
