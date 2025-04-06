@@ -8,21 +8,23 @@ class JSRTDataset(Dataset):
     """
     Dataset class for JSRT chest X-ray segmentation dataset
     """
-    def __init__(self, image_dir, mask_dir, transform=None):
+    def __init__(self, image_dir, mask_dir, transform=None, target_size=(1024, 1024)):
         """
         Args:
             image_dir (str): Path to the image directory
             mask_dir (str): Path to the mask directory
             transform (callable, optional): Optional transform to be applied on a sample
+            target_size (tuple): Target size for resizing images and masks
         """
         self.image_dir = image_dir
         self.mask_dir = mask_dir
         self.transform = transform
+        self.target_size = target_size
         
         # Get all valid image-mask pairs
         self.valid_files = []
         for img_name in os.listdir(image_dir):
-            mask_name = os.path.splitext(img_name)[0] + '.png'  # Masks are PNG
+            mask_name = img_name.replace('JPCLN', 'JPCNN')
             img_path = os.path.join(image_dir, img_name)
             mask_path = os.path.join(mask_dir, mask_name)
             
@@ -50,7 +52,8 @@ class JSRTDataset(Dataset):
             tuple: (image, mask) where mask is the segmentation mask
         """
         img_name = self.valid_files[idx]
-        mask_name = os.path.splitext(img_name)[0] + '.png'
+        # Convert JPCLN to JPCNN for mask filename
+        mask_name = img_name.replace('JPCLN', 'JPCNN')
         
         # Load image and mask
         image_path = os.path.join(self.image_dir, img_name)
@@ -61,16 +64,15 @@ class JSRTDataset(Dataset):
             print(f"\nLoading files:")
             print(f"Image: {image_path}")
             print(f"Mask: {mask_path}")
+            print(f"Mask exists: {os.path.exists(mask_path)}")
         
         # Load image and mask
         image = Image.open(image_path).convert('L')
         mask = Image.open(mask_path).convert('L')
         
-        # Resize image to match mask size immediately
-        if image.size != mask.size:
-            if idx == 0:
-                print(f"\nResizing image from {image.size} to {mask.size}")
-            image = image.resize(mask.size, Image.Resampling.BILINEAR)
+        # Resize both image and mask to target size
+        image = image.resize(self.target_size, Image.Resampling.BILINEAR)
+        mask = mask.resize(self.target_size, Image.Resampling.NEAREST)
         
         # Convert to numpy arrays
         image = np.array(image)
