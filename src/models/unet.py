@@ -51,10 +51,10 @@ class Up(nn.Module):
         # if bilinear, use normal convolutions to reduce the number of channels
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.conv = DoubleConv(in_channels, out_channels, dropout_rate=dropout_rate)
         else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-            
-        self.conv = DoubleConv(in_channels, out_channels, dropout_rate=dropout_rate)
+            self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+            self.conv = DoubleConv(out_channels * 2, out_channels, dropout_rate=dropout_rate)
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
@@ -103,10 +103,10 @@ class UNet(nn.Module):
 
         # Upsampling path
         self.ups = nn.ModuleList()
-        prev_channels = features[-1]
-        for feature in reversed(features[:-1]):
-            self.ups.append(Up(prev_channels + feature, feature, bilinear, dropout_rate=dropout_rate))
-            prev_channels = feature
+        for i in range(len(features)-1):
+            in_channels = features[-1-i]
+            out_channels = features[-2-i]
+            self.ups.append(Up(in_channels, out_channels, bilinear, dropout_rate=dropout_rate))
 
         # Output layer
         self.outc = OutConv(features[0], out_channels)

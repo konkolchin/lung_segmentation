@@ -43,30 +43,25 @@ def create_transforms(is_train=True):
 
 def dice_loss(pred, target, smooth=1e-5):
     """
-    Calculate Dice loss with better numerical stability and stronger gradients
+    Calculate Dice loss with better numerical stability
     """
-    # Apply sigmoid activation with temperature for sharper gradients
-    temperature = 1.5
-    pred = torch.sigmoid(pred * temperature)
+    # Apply sigmoid activation
+    pred = torch.sigmoid(pred)
     
     # Flatten the predictions and targets
     pred = pred.view(-1)
     target = target.view(-1)
     
-    # Calculate intersection and union using squared terms for better gradients
+    # Calculate intersection and union
     intersection = (pred * target).sum()
-    pred_squared_sum = (pred * pred).sum()
-    target_squared_sum = (target * target).sum()
+    pred_sum = pred.sum()
+    target_sum = target.sum()
     
-    # Calculate dice coefficient with larger smoothing factor
-    dice = (2.0 * intersection + smooth) / (pred_squared_sum + target_squared_sum + smooth)
+    # Calculate dice coefficient
+    dice = (2.0 * intersection + smooth) / (pred_sum + target_sum + smooth)
     
-    # Add L1 regularization term to encourage sparsity
-    l1_factor = 0.01
-    l1_term = l1_factor * pred.abs().mean()
-    
-    # Return combined loss
-    return 1.0 - dice + l1_term
+    # Return loss
+    return 1.0 - dice
 
 def dice_score(pred, target, smooth=1e-8):
     """
