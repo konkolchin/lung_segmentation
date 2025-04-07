@@ -41,26 +41,32 @@ def create_transforms(is_train=True):
             ToTensorV2()
         ], additional_targets={'mask': 'mask'})
 
-def dice_loss(pred, target, smooth=1.0):
+def dice_loss(pred, target, smooth=1e-5):
     """
-    Calculate Dice loss with better numerical stability
+    Calculate Dice loss with better numerical stability and stronger gradients
     """
-    # Apply sigmoid activation
-    pred = torch.sigmoid(pred)
+    # Apply sigmoid activation with temperature for sharper gradients
+    temperature = 1.5
+    pred = torch.sigmoid(pred * temperature)
     
     # Flatten the predictions and targets
     pred = pred.view(-1)
     target = target.view(-1)
     
-    # Calculate intersection and union
+    # Calculate intersection and union using squared terms for better gradients
     intersection = (pred * target).sum()
-    denominator = pred.sum() + target.sum()
+    pred_squared_sum = (pred * pred).sum()
+    target_squared_sum = (target * target).sum()
     
-    # Add smooth terms to both numerator and denominator
-    dice = (2.0 * intersection + smooth) / (denominator + smooth)
+    # Calculate dice coefficient with larger smoothing factor
+    dice = (2.0 * intersection + smooth) / (pred_squared_sum + target_squared_sum + smooth)
     
-    # Return loss
-    return 1.0 - dice
+    # Add L1 regularization term to encourage sparsity
+    l1_factor = 0.01
+    l1_term = l1_factor * pred.abs().mean()
+    
+    # Return combined loss
+    return 1.0 - dice + l1_term
 
 def dice_score(pred, target, smooth=1e-8):
     """
@@ -90,28 +96,24 @@ def train_epoch(model, train_loader, optimizer, criterion, device, gradient_clip
     num_batches = len(train_loader)
     
     try:
-        pbar = tqdm(train_loader, desc='Training')
+        pbar = tqdm(train_loader, desc='Training', ncols=100)
         for batch_idx, (images, masks) in enumerate(pbar):
             try:
                 # Move to device
                 images = images.to(device)
                 masks = masks.to(device)
                 
-                # Debug info for first batch
-                if batch_idx == 0:
-                    print(f"\nBatch info:")
+                # Debug info for first batch of first epoch
+                if batch_idx == 0 and not hasattr(train_epoch, 'first_batch_done'):
+                    print(f"\nInitial batch info:")
                     print(f"Images: shape={images.shape}, range=[{images.min():.3f}, {images.max():.3f}]")
                     print(f"Masks: shape={masks.shape}, range=[{masks.min():.3f}, {masks.max():.3f}]")
                     print(f"Mask unique values: {torch.unique(masks).tolist()}")
+                    train_epoch.first_batch_done = True
                 
                 # Forward pass
                 optimizer.zero_grad()
                 outputs = model(images)
-                
-                # Debug info for first batch
-                if batch_idx == 0:
-                    print(f"Outputs: shape={outputs.shape}, range=[{outputs.min():.3f}, {outputs.max():.3f}]")
-                    print(f"Output unique values: {torch.unique(outputs).tolist()}")
                 
                 # Calculate loss
                 loss = criterion(outputs, masks)
@@ -119,9 +121,6 @@ def train_epoch(model, train_loader, optimizer, criterion, device, gradient_clip
                 # Check for NaN loss
                 if torch.isnan(loss):
                     print(f"\nWarning: NaN loss detected in batch {batch_idx}")
-                    print(f"Loss: {loss.item()}")
-                    print(f"Output stats: min={outputs.min():.3f}, max={outputs.max():.3f}")
-                    print(f"Mask stats: min={masks.min():.3f}, max={masks.max():.3f}")
                     continue
                 
                 # Backward pass
@@ -137,12 +136,12 @@ def train_epoch(model, train_loader, optimizer, criterion, device, gradient_clip
                 total_loss += loss.item()
                 total_dice += dice
                 
-                # Update progress bar
+                # Update progress bar with current batch metrics
+                current_loss = total_loss / (batch_idx + 1)
+                current_dice = total_dice / (batch_idx + 1)
                 pbar.set_postfix({
-                    'loss': f'{loss.item():.4f}',
-                    'dice': f'{dice:.4f}',
-                    'avg_loss': f'{total_loss/(batch_idx+1):.4f}',
-                    'avg_dice': f'{total_dice/(batch_idx+1):.4f}'
+                    'loss': f'{current_loss:.4f}',
+                    'dice': f'{current_dice:.4f}'
                 })
                 
             except RuntimeError as e:
@@ -167,7 +166,13 @@ def train_epoch(model, train_loader, optimizer, criterion, device, gradient_clip
         print(f"\nTraining failed: {str(e)}")
         raise e
     
-    return total_loss / num_batches, total_dice / num_batches
+    avg_loss = total_loss / num_batches
+    avg_dice = total_dice / num_batches
+    print(f"\nEpoch Summary:")
+    print(f"Average Loss: {avg_loss:.4f}")
+    print(f"Average Dice: {avg_dice:.4f}")
+    
+    return avg_loss, avg_dice
 
 def validate(model, loader, criterion, device):
     """Validate the model"""
@@ -177,8 +182,10 @@ def validate(model, loader, criterion, device):
     num_batches = len(loader)
     
     try:
+        print("\nValidating...")
         with torch.no_grad():
-            for images, masks in tqdm(loader, desc='Validation'):
+            pbar = tqdm(loader, desc='Validation', ncols=100)
+            for batch_idx, (images, masks) in enumerate(pbar):
                 try:
                     # Move to device
                     images = images.to(device)
@@ -198,6 +205,14 @@ def validate(model, loader, criterion, device):
                     
                     total_loss += loss.item()
                     total_dice += dice
+                    
+                    # Update progress bar
+                    current_loss = total_loss / (batch_idx + 1)
+                    current_dice = total_dice / (batch_idx + 1)
+                    pbar.set_postfix({
+                        'val_loss': f'{current_loss:.4f}',
+                        'val_dice': f'{current_dice:.4f}'
+                    })
                 
                 except Exception as e:
                     print(f"\nError during validation: {str(e)}")
@@ -211,7 +226,13 @@ def validate(model, loader, criterion, device):
         print(f"\nValidation failed: {str(e)}")
         raise e
     
-    return total_loss / num_batches, total_dice / num_batches
+    avg_loss = total_loss / num_batches
+    avg_dice = total_dice / num_batches
+    print(f"\nValidation Summary:")
+    print(f"Average Loss: {avg_loss:.4f}")
+    print(f"Average Dice: {avg_dice:.4f}")
+    
+    return avg_loss, avg_dice
 
 def save_checkpoint(model, optimizer, epoch, loss, config, is_best=False):
     """
@@ -263,7 +284,7 @@ def main():
     else:
         if torch.cuda.is_available():
             device = torch.device('cuda')
-            torch.backends.cudnn.benchmark = True  # Enable cuDNN auto-tuner
+            torch.backends.cudnn.benchmark = True
             print(f"Using GPU: {torch.cuda.get_device_name(0)}")
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             device = torch.device('mps')
@@ -306,7 +327,7 @@ def main():
     )
     
     print(f'Training samples: {len(train_dataset)}')
-    print(f'Validation samples: {len(val_dataset)}')
+    print(f'Validation samples: {len(val_dataset)}\n')
     
     # Initialize model
     model = UNet(
@@ -340,9 +361,15 @@ def main():
     
     # Training loop
     best_val_loss = float('inf')
+    print("\nStarting training...")
+    print(f"Epochs: {config.num_epochs}")
+    print(f"Batch size: {config.batch_size}")
+    print(f"Learning rate: {config.learning_rate}")
+    print(f"Image size: {config.image_size}\n")
     
     for epoch in range(config.num_epochs):
         print(f'\nEpoch {epoch+1}/{config.num_epochs}')
+        print('-' * 20)
         
         # Train
         train_loss, train_dice = train_epoch(
@@ -355,13 +382,16 @@ def main():
         
         # Update learning rate
         scheduler.step(val_loss)
+        current_lr = optimizer.param_groups[0]['lr']
         
         # Log metrics
         writer.add_scalar('Loss/train', train_loss, epoch)
         writer.add_scalar('Loss/val', val_loss, epoch)
         writer.add_scalar('Dice/train', train_dice, epoch)
         writer.add_scalar('Dice/val', val_dice, epoch)
-        writer.add_scalar('LR', optimizer.param_groups[0]['lr'], epoch)
+        writer.add_scalar('LR', current_lr, epoch)
+        
+        print(f"\nLearning rate: {current_lr:.2e}")
         
         # Log images periodically
         if epoch % config.log_images_every == 0:
@@ -383,16 +413,14 @@ def main():
         if is_best:
             best_val_loss = val_loss
             save_checkpoint(model, optimizer, epoch, val_loss, config, is_best=True)
+            print("\nSaved new best model!")
         
         if (epoch + 1) % config.save_every == 0:
             save_checkpoint(model, optimizer, epoch, val_loss, config)
-        
-        print(f'Train Loss: {train_loss:.4f}, Train Dice: {train_dice:.4f}')
-        print(f'Val Loss: {val_loss:.4f}, Val Dice: {val_dice:.4f}')
-        print(f'LR: {optimizer.param_groups[0]["lr"]:.2e}')
+            print(f"\nSaved checkpoint at epoch {epoch+1}")
     
     writer.close()
-    print('Training completed!')
+    print('\nTraining completed!')
 
 if __name__ == '__main__':
     main() 

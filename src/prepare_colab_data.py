@@ -4,14 +4,20 @@ import argparse
 from pathlib import Path
 import sys
 
-def create_directory_structure(base_path):
+def create_directory_structure(base_path, split=0.8):
     """Create the required directory structure."""
-    dirs = [
-        'train/images',
-        'train/masks',
-        'val/images',
-        'val/masks'
-    ]
+    if split < 1.0:
+        dirs = [
+            'train/images',
+            'train/masks',
+            'val/images',
+            'val/masks'
+        ]
+    else:
+        dirs = [
+            'images',
+            'masks'
+        ]
     
     for dir_path in dirs:
         full_path = os.path.join(base_path, dir_path)
@@ -45,51 +51,77 @@ def verify_image_mask_pairs(image_dir, mask_dir):
 def organize_data(source_dir, dest_dir, split_ratio=0.8):
     """Organize data into train and validation sets."""
     # Create directory structure
-    create_directory_structure(dest_dir)
+    create_directory_structure(dest_dir, split_ratio)
     
     # Get all image files
     image_files = [f for f in os.listdir(os.path.join(source_dir, 'images'))
                   if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     
-    # Calculate split
-    num_train = int(len(image_files) * split_ratio)
-    train_files = image_files[:num_train]
-    val_files = image_files[num_train:]
-    
-    # Copy files
-    for file_list, subset in [(train_files, 'train'), (val_files, 'val')]:
-        for img_file in file_list:
+    if split_ratio < 1.0:
+        # Calculate split
+        num_train = int(len(image_files) * split_ratio)
+        train_files = image_files[:num_train]
+        val_files = image_files[num_train:]
+        
+        # Copy files
+        for file_list, subset in [(train_files, 'train'), (val_files, 'val')]:
+            for img_file in file_list:
+                # Copy image
+                src_img = os.path.join(source_dir, 'images', img_file)
+                dst_img = os.path.join(dest_dir, subset, 'images', img_file)
+                shutil.copy2(src_img, dst_img)
+                
+                # Copy mask
+                src_mask = os.path.join(source_dir, 'masks', img_file)
+                dst_mask = os.path.join(dest_dir, subset, 'masks', img_file)
+                if os.path.exists(src_mask):
+                    shutil.copy2(src_mask, dst_mask)
+        
+        # Verify data
+        print("\nVerifying train set...")
+        train_ok = verify_image_mask_pairs(
+            os.path.join(dest_dir, 'train', 'images'),
+            os.path.join(dest_dir, 'train', 'masks')
+        )
+        
+        print("\nVerifying validation set...")
+        val_ok = verify_image_mask_pairs(
+            os.path.join(dest_dir, 'val', 'images'),
+            os.path.join(dest_dir, 'val', 'masks')
+        )
+        
+        verification_ok = train_ok and val_ok
+    else:
+        # Copy all files directly
+        for img_file in image_files:
             # Copy image
             src_img = os.path.join(source_dir, 'images', img_file)
-            dst_img = os.path.join(dest_dir, subset, 'images', img_file)
+            dst_img = os.path.join(dest_dir, 'images', img_file)
             shutil.copy2(src_img, dst_img)
             
             # Copy mask
             src_mask = os.path.join(source_dir, 'masks', img_file)
-            dst_mask = os.path.join(dest_dir, subset, 'masks', img_file)
+            dst_mask = os.path.join(dest_dir, 'masks', img_file)
             if os.path.exists(src_mask):
                 shutil.copy2(src_mask, dst_mask)
-    
-    # Verify data
-    print("\nVerifying train set...")
-    train_ok = verify_image_mask_pairs(
-        os.path.join(dest_dir, 'train', 'images'),
-        os.path.join(dest_dir, 'train', 'masks')
-    )
-    
-    print("\nVerifying validation set...")
-    val_ok = verify_image_mask_pairs(
-        os.path.join(dest_dir, 'val', 'images'),
-        os.path.join(dest_dir, 'val', 'masks')
-    )
+        
+        # Verify data
+        print("\nVerifying dataset...")
+        verification_ok = verify_image_mask_pairs(
+            os.path.join(dest_dir, 'images'),
+            os.path.join(dest_dir, 'masks')
+        )
+        val_files = []
     
     # Print summary
     print("\nData Organization Summary:")
-    print(f"Training samples: {len(train_files)}")
-    print(f"Validation samples: {len(val_files)}")
-    print(f"Total samples: {len(image_files)}")
+    if split_ratio < 1.0:
+        print(f"Training samples: {len(train_files)}")
+        print(f"Validation samples: {len(val_files)}")
+    else:
+        print(f"Total samples: {len(image_files)}")
     print(f"Split ratio: {split_ratio:.2f}")
-    print(f"Data verification: {'✓ Passed' if train_ok and val_ok else '✗ Failed'}")
+    print(f"Data verification: {'✓ Passed' if verification_ok else '✗ Failed'}")
 
 def main():
     parser = argparse.ArgumentParser(description='Prepare dataset for Colab training')
@@ -113,7 +145,8 @@ def main():
     
     # Organize data
     print(f"\nOrganizing data from {args.source} to {args.dest}")
-    print(f"Using train/val split ratio of {args.split}")
+    if args.split < 1.0:
+        print(f"Using train/val split ratio of {args.split}")
     organize_data(args.source, args.dest, args.split)
 
 if __name__ == '__main__':

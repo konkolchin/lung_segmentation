@@ -13,6 +13,8 @@ A deep learning project for automatic lung segmentation in chest X-ray images us
 - Dice loss and score metrics
 - Checkpoint saving and loading
 - Learning rate scheduling
+- Google Colab support
+- Data preparation utilities
 
 ## Project Structure
 
@@ -24,7 +26,8 @@ lung_segmentation/
 │   ├── utils/
 │   │   └── dataset.py
 │   ├── config.py
-│   └── train.py
+│   ├── train.py
+│   └── prepare_colab_data.py
 ├── data/
 │   ├── train/
 │   │   ├── images/
@@ -32,6 +35,7 @@ lung_segmentation/
 │   └── val/
 │       ├── images/
 │       └── masks/
+├── prepared_data/    # Organized dataset for training
 ├── checkpoints/
 ├── logs/
 ├── Dockerfile
@@ -74,6 +78,8 @@ docker-compose up
 
 ## Dataset Preparation
 
+### 1. Initial Dataset Setup
+
 1. Download the JSRT dataset
 2. Run the conversion script:
 ```bash
@@ -84,6 +90,36 @@ This will:
 - Download the mask files
 - Convert them to the correct format
 - Split them into training and validation sets
+
+### 2. Data Organization
+
+Use the data preparation script to organize your dataset:
+
+1. For training data:
+```bash
+python src/prepare_colab_data.py --source ./data/train --dest ./prepared_data/train --split 1.0
+```
+
+2. For validation data:
+```bash
+python src/prepare_colab_data.py --source ./data/val --dest ./prepared_data/val --split 1.0
+```
+
+The script will:
+- Create the necessary directory structure
+- Copy images and masks to the correct locations
+- Verify image-mask pairs
+- Generate a detailed report
+
+For custom dataset organization:
+```bash
+python src/prepare_colab_data.py --source ./your_data_dir --dest ./prepared_data --split 0.8
+```
+
+This will:
+- Split your data into train (80%) and validation (20%) sets
+- Create the required directory structure
+- Verify data integrity
 
 ## Training
 
@@ -98,6 +134,10 @@ python src/train.py
 ```bash
 docker-compose run lung_segmentation
 ```
+
+### Google Colab Training
+
+See `README_COLAB.md` for detailed instructions on running training on Google Colab.
 
 ## Configuration
 

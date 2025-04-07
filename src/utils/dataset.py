@@ -24,9 +24,8 @@ class JSRTDataset(Dataset):
         # Get all valid image-mask pairs
         self.valid_files = []
         for img_name in os.listdir(image_dir):
-            mask_name = img_name.replace('JPCLN', 'JPCNN')
+            mask_path = os.path.join(mask_dir, img_name)  # Use same filename for mask
             img_path = os.path.join(image_dir, img_name)
-            mask_path = os.path.join(mask_dir, mask_name)
             
             if os.path.exists(mask_path):
                 try:
@@ -52,12 +51,10 @@ class JSRTDataset(Dataset):
             tuple: (image, mask) where mask is the segmentation mask
         """
         img_name = self.valid_files[idx]
-        # Convert JPCLN to JPCNN for mask filename
-        mask_name = img_name.replace('JPCLN', 'JPCNN')
         
-        # Load image and mask
+        # Load image and mask (using same filename)
         image_path = os.path.join(self.image_dir, img_name)
-        mask_path = os.path.join(self.mask_dir, mask_name)
+        mask_path = os.path.join(self.mask_dir, img_name)
         
         # Debug info for first item
         if idx == 0:
