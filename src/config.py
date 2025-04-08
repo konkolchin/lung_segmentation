@@ -4,7 +4,7 @@ import os
 @dataclass
 class TrainingConfig:
     # Device settings
-    force_cpu: bool = True  # Force CPU usage since GPU is too old
+    force_cpu: bool = False # if True, Force CPU usage because, e.g., since GPU is too old
     
     # Model parameters
     in_channels: int = 1
